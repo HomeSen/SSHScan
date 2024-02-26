@@ -3,11 +3,17 @@
 import sys
 import socket
 import struct
-from yaml import safe_load
+from json import dumps as json_dumps
+from yaml import safe_load, dump as yaml_dumps
 from typing import List, Tuple
 from secrets import token_bytes
 from binascii import hexlify
 from optparse import OptionParser, OptionGroup
+
+try:
+    from yaml import CDumper as Dumper
+except ImportError:
+    from yaml import Dumper
 
 
 def banner():
@@ -105,6 +111,15 @@ def parse_results(version, kex, salg, enc, mac, cmpv):
 
     if compression:
         print("    [+] Compression has been enabled!")
+
+    return {
+             "version": version,
+             "ciphers": {"all": enc, "weak": weak_ciphers},
+             "kex": {"all": kex, "weak": weak_kex},
+             "mac": {"all": mac, "weak": weak_macs},
+             "hostkey": {"all": salg, "weak": weak_hka},
+             "compression": cmpv
+           }
 
 
 def unpack_ssh_name_list(kex, n):
@@ -272,27 +287,47 @@ def main():
 
     print(banner())
     parser = OptionParser(usage="usage %prog [options]", version="%prog 2.0")
-    parameters = OptionGroup(parser, "Options")
+    input_parameters = OptionGroup(parser, "Input options")
 
-    parameters.add_option(
+    input_parameters.add_option(
         "-t",
         "--target",
         type="string",
         help="Specify target as 'target' or 'target:port' (port 22 is default)",
         dest="target",
     )
-    parameters.add_option(
+    input_parameters.add_option(
         "-l",
         "--target-list",
         type="string",
         help="File with targets: 'target' or 'target:port' seperated by a newline (port 22 is default)",
         dest="targetlist",
     )
-    parser.add_option_group(parameters)
+    parser.add_option_group(input_parameters)
+
+    output_parameters = OptionGroup(parser, "Output options")
+    output_parameters.add_option(
+        "-j",
+        "--json",
+        type="string",
+        help="JSON output file for scan results",
+        dest="json_output",
+    )
+    output_parameters.add_option(
+        "-y",
+        "--yaml",
+        type="string",
+        help="YAML output file for scan results",
+        dest="yaml_output",
+        
+    )
+    parser.add_option_group(output_parameters)
 
     options, arguments = parser.parse_args()
 
     targets = []
+    results = {}
+    store_output = options.json_output or options.yaml_output 
 
     target = options.target
     targetlist = options.targetlist
@@ -336,10 +371,21 @@ def main():
         # parse the server KEXINIT message
         kex, salg, enc, mac, cmpv = unpack_msg_kex_init(target, kex_init)
 
-        parse_results(version, kex, salg, enc, mac, cmpv)
+        if store_output:
+            results[target] = parse_results(version, kex, salg, enc, mac, cmpv)
+        else:
+            parse_results(version, kex, salg, enc, mac, cmpv)
 
         if (target != targets[-1]) and (target.split(':')[0] != targets[-1].split(':')[0]):
             print("\n-----\n")
+
+    if options.json_output:
+        with open(options.json_output, "wb") as f:
+            f.write(json_dumps(results, indent=2).encode("utf-8"))
+    if options.yaml_output:
+        with open(options.yaml_output, "wb") as f:
+            f.write(yaml_dumps(results, default_flow_style=False, width=160, Dumper=Dumper).encode("utf-8"))
+
 
 
 if __name__ == "__main__":
