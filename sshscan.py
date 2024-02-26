@@ -54,7 +54,7 @@ def return_diff_list(detected, strong):
     
     return results
 
-def parse_results(version, kex, salg, enc, mac, cmpv):
+def parse_results(version, kex, salg, enc, mac, cmpv, verbose=True):
 
     version = version.decode("utf-8").rstrip()
     kex = kex.decode("utf-8").split(",")
@@ -73,14 +73,15 @@ def parse_results(version, kex, salg, enc, mac, cmpv):
 
     compression = True if "zlib@openssh.com" in cmpv else False
 
-    print("    [+] Detected the following ciphers: ")
-    print_columns(enc)
-    print("    [+] Detected the following KEX algorithms: ")
-    print_columns(kex)
-    print("    [+] Detected the following MACs: ")
-    print_columns(mac)
-    print("    [+] Detected the following HostKey algorithms: ")
-    print_columns(salg)
+    if verbose:
+        print("    [+] Detected the following ciphers: ")
+        print_columns(enc)
+        print("    [+] Detected the following KEX algorithms: ")
+        print_columns(kex)
+        print("    [+] Detected the following MACs: ")
+        print_columns(mac)
+        print("    [+] Detected the following HostKey algorithms: ")
+        print_columns(salg)
 
     print("    [+] Target SSH version is: %s" % version)
     print("    [+] Retrieving ciphers...")
@@ -323,6 +324,14 @@ def main():
     )
     parser.add_option_group(output_parameters)
 
+    parser.add_option(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Print less verbose output",
+        dest="quiet",
+    )
+
     options, arguments = parser.parse_args()
 
     targets = []
@@ -372,9 +381,9 @@ def main():
         kex, salg, enc, mac, cmpv = unpack_msg_kex_init(target, kex_init)
 
         if store_output:
-            results[target] = parse_results(version, kex, salg, enc, mac, cmpv)
+            results[target] = parse_results(version, kex, salg, enc, mac, cmpv, not options.quiet)
         else:
-            parse_results(version, kex, salg, enc, mac, cmpv)
+            parse_results(version, kex, salg, enc, mac, cmpv, not options.quiet)
 
         if (target != targets[-1]) and (target.split(':')[0] != targets[-1].split(':')[0]):
             print("\n-----\n")
